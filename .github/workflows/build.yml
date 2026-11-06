@@ -1,0 +1,506 @@
+name: Build Uzbek Caller ID APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Generate Project Code
+        run: |
+          mkdir -p gradle/wrapper
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/java/uz/callerid/uzbek
+
+          # 1. settings.gradle
+          cat << 'EOF' > settings.gradle
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "UzbekCallerID"
+          include ':app'
+          EOF
+
+          # 2. build.gradle (root)
+          cat << 'EOF' > build.gradle
+          plugins {
+              id 'com.android.application' version '8.2.2' apply false
+              id 'org.jetbrains.kotlin.android' version '1.9.22' apply false
+          }
+          EOF
+
+          # 3. gradle.properties
+          cat << 'EOF' > gradle.properties
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          EOF
+
+          # 4. app/build.gradle
+          cat << 'EOF' > app/build.gradle
+          plugins {
+              id 'com.android.application'
+              id 'org.jetbrains.kotlin.android'
+          }
+
+          android {
+              namespace 'uz.callerid.uzbek'
+              compileSdk 34
+
+              defaultConfig {
+                  applicationId "uz.callerid.uzbek"
+                  minSdk 24
+                  targetSdk 33
+                  versionCode 1
+                  versionName "1.0"
+              }
+
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                  }
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = '17'
+              }
+          }
+
+          dependencies {
+              implementation 'androidx.core:core-ktx:1.12.0'
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'com.google.android.material:material:1.11.0'
+          }
+          EOF
+
+          # 5. Strings and Themes
+          cat << 'EOF' > app/src/main/res/values/strings.xml
+          <resources>
+              <string name="app_name">O‘zbekcha Caller ID</string>
+          </resources>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/values/themes.xml
+          <resources>
+              <style name="Theme.UzbekCallerID" parent="Theme.MaterialComponents.DayNight.NoActionBar" />
+          </resources>
+          EOF
+
+          # 6. AndroidManifest.xml
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+              <uses-permission android:name="android.permission.READ_CALL_LOG" />
+              <uses-permission android:name="android.permission.READ_CONTACTS" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.WAKE_LOCK" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+              <application
+                  android:allowBackup="true"
+                  android:icon="@android:drawable/ic_btn_speak_now"
+                  android:label="@string/app_name"
+                  android:theme="@style/Theme.UzbekCallerID">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+
+                  <receiver
+                      android:name=".CallReceiver"
+                      android:enabled="true"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.PHONE_STATE" />
+                      </intent-filter>
+                  </receiver>
+
+                  <service
+                      android:name=".CallAnnouncerService"
+                      android:exported="false" />
+
+              </application>
+          </manifest>
+          EOF
+
+          # 7. UzbekNumberConverter.kt
+          cat << 'EOF' > app/src/main/java/uz/callerid/uzbek/UzbekNumberConverter.kt
+          package uz.callerid.uzbek
+
+          object UzbekNumberConverter {
+              private val units = mapOf(
+                  '0' to "nol", '1' to "bir", '2' to "ikki", '3' to "uch", '4' to "to‘rt",
+                  '5' to "besh", '6' to "olti", '7' to "yetti", '8' to "sakkiz", '9' to "to‘qqiz"
+              )
+              private val tens = mapOf(
+                  '1' to "o‘n", '2' to "yigirma", '3' to "o‘ttiz", '4' to "qirq",
+                  '5' to "ellik", '6' to "oltmish", '7' to "yetmish", '8' to "sakson", '9' to "to‘qson"
+              )
+
+              fun convertTwoDigit(num: String): String {
+                  if (num.length == 1) return units[num[0]] ?: ""
+                  val t = tens[num[0]] ?: ""
+                  val u = if (num[1] != '0') units[num[1]] ?: "" else ""
+                  return "$t $u".trim()
+              }
+
+              fun convertThreeDigit(num: String): String {
+                  val h = num[0]
+                  val prefix = if (h == '1') "bir yuz" else "${units[h]} yuz"
+                  val remaining = convertTwoDigit(num.substring(1))
+                  return if (remaining.isNotEmpty()) "$prefix $remaining" else prefix
+              }
+
+              fun formatPhoneNumberToWords(rawNumber: String): String {
+                  var clean = rawNumber.replace("+998", "").replace("[^0-9]".toRegex(), "")
+                  if (clean.length > 9) clean = clean.takeLast(9)
+
+                  if (clean.length == 9) {
+                      val code = convertTwoDigit(clean.substring(0, 2))
+                      val part1 = convertThreeDigit(clean.substring(2, 5))
+                      val part2 = convertTwoDigit(clean.substring(5, 7))
+                      val part3 = convertTwoDigit(clean.substring(7, 9))
+                      return "$code, $part1, $part2, $part3"
+                  }
+                  return clean.map { units[it] ?: "" }.joinToString(" ")
+              }
+          }
+          EOF
+
+          # 8. ContactHelper.kt
+          cat << 'EOF' > app/src/main/java/uz/callerid/uzbek/ContactHelper.kt
+          package uz.callerid.uzbek
+
+          import android.content.Context
+          import android.net.Uri
+          import android.provider.ContactsContract
+
+          object ContactHelper {
+              fun getContactName(context: Context, phoneNumber: String): String? {
+                  if (phoneNumber.isBlank()) return null
+                  val uri = Uri.withAppendedPath(
+                      ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+                      Uri.encode(phoneNumber)
+                  )
+                  val projection = arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME)
+                  return try {
+                      context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                          if (cursor.moveToFirst()) {
+                              val nameIndex = cursor.getColumnIndex(ContactsContract.PhoneLookup.DISPLAY_NAME)
+                              if (nameIndex != -1) cursor.getString(nameIndex) else null
+                          } else null
+                      }
+                  } catch (e: Exception) {
+                      null
+                  }
+              }
+          }
+          EOF
+
+          # 9. CallAnnouncerService.kt
+          cat << 'EOF' > app/src/main/java/uz/callerid/uzbek/CallAnnouncerService.kt
+          package uz.callerid.uzbek
+
+          import android.app.*
+          import android.content.Context
+          import android.content.Intent
+          import android.media.AudioManager
+          import android.os.Build
+          import android.os.IBinder
+          import android.os.PowerManager
+          import android.speech.tts.TextToSpeech
+          import androidx.core.app.NotificationCompat
+          import java.util.Locale
+
+          class CallAnnouncerService : Service(), TextToSpeech.OnInitListener {
+
+              private var tts: TextToSpeech? = null
+              private var isTtsReady = false
+              private var wakeLock: PowerManager.WakeLock? = null
+              private var isCalling = false
+              private var announcementText = ""
+              private var currentRepeat = 0
+
+              override fun onCreate() {
+                  super.onCreate()
+                  tts = TextToSpeech(this, this)
+                  val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+                  wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "uzcallerid::WakeLock")
+                  wakeLock?.acquire(60 * 1000L)
+              }
+
+              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+                  createNotificationChannel()
+                  val notification = NotificationCompat.Builder(this, "CALLER_ID_CHANNEL")
+                      .setContentTitle("O‘zbekcha Caller ID")
+                      .setContentText("Qo‘ng‘iroq o‘qilmoqda...")
+                      .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+                      .build()
+                  startForeground(101, notification)
+
+                  val number = intent?.getStringExtra("NUMBER") ?: ""
+                  val state = intent?.getStringExtra("STATE") ?: ""
+
+                  if (state == "RINGING") {
+                      prepareAnnouncement(number)
+                  } else if (state == "IDLE" || state == "OFFHOOK") {
+                      stopAnnouncing()
+                      stopSelf()
+                  }
+                  return START_NOT_STICKY
+              }
+
+              private fun prepareAnnouncement(number: String) {
+                  val prefs = getSharedPreferences("settings", Context.MODE_PRIVATE)
+                  if (!prefs.getBoolean("enabled", true)) return
+
+                  val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                  if (audioManager.ringerMode != AudioManager.RINGER_MODE_NORMAL) return
+
+                  val contactName = ContactHelper.getContactName(this, number)
+                  announcementText = if (contactName != null) {
+                      "$contactName sizga telefon qilyapti"
+                  } else {
+                      val words = UzbekNumberConverter.formatPhoneNumberToWords(number)
+                      "$words telefon qilyapti"
+                  }
+
+                  currentRepeat = 0
+                  isCalling = true
+                  if (isTtsReady) {
+                      startSpeakingLoop()
+                  }
+              }
+
+              override fun onInit(status: Int) {
+                  if (status == TextToSpeech.SUCCESS) {
+                      val uzLocale = Locale("uz", "UZ")
+                      val res = tts?.setLanguage(uzLocale)
+                      if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
+                          tts?.language = Locale("tr", "TR")
+                      }
+                      tts?.setPitch(1.15f)
+                      tts?.setSpeechRate(0.95f)
+                      isTtsReady = true
+                      if (isCalling) {
+                          startSpeakingLoop()
+                      }
+                  }
+              }
+
+              private fun startSpeakingLoop() {
+                  Thread {
+                      while (isCalling && currentRepeat < 4) {
+                          tts?.speak(announcementText, TextToSpeech.QUEUE_FLUSH, null, "ID")
+                          currentRepeat++
+                          Thread.sleep(3500)
+                      }
+                      if (currentRepeat >= 4) {
+                          stopSelf()
+                      }
+                  }.start()
+              }
+
+              private fun stopAnnouncing() {
+                  isCalling = false
+                  tts?.stop()
+              }
+
+              override fun onDestroy() {
+                  stopAnnouncing()
+                  tts?.shutdown()
+                  if (wakeLock?.isHeld == true) wakeLock?.release()
+                  super.onDestroy()
+              }
+
+              override fun onBind(intent: Intent?): IBinder? = null
+
+              private fun createNotificationChannel() {
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                      val channel = NotificationChannel(
+                          "CALLER_ID_CHANNEL",
+                          "Caller ID",
+                          NotificationManager.IMPORTANCE_LOW
+                      )
+                      val manager = getSystemService(NotificationManager::class.java)
+                      manager.createNotificationChannel(channel)
+                  }
+              }
+          }
+          EOF
+
+          # 10. CallReceiver.kt
+          cat << 'EOF' > app/src/main/java/uz/callerid/uzbek/CallReceiver.kt
+          package uz.callerid.uzbek
+
+          import android.content.BroadcastReceiver
+          import android.content.Context
+          import android.content.Intent
+          import android.telephony.TelephonyManager
+
+          class CallReceiver : BroadcastReceiver() {
+              override fun onReceive(context: Context, intent: Intent) {
+                  if (intent.action == TelephonyManager.ACTION_PHONE_STATE_CHANGED) {
+                      val state = intent.getStringExtra(TelephonyManager.EXTRA_STATE)
+                      val incomingNumber = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
+
+                      val serviceIntent = Intent(context, CallAnnouncerService::class.java).apply {
+                          putExtra("STATE", state)
+                          putExtra("NUMBER", incomingNumber ?: "")
+                      }
+
+                      if (state == TelephonyManager.EXTRA_STATE_RINGING) {
+                          if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                              context.startForegroundService(serviceIntent)
+                          } else {
+                              context.startService(serviceIntent)
+                          }
+                      } else {
+                          context.stopService(serviceIntent)
+                      }
+                  }
+              }
+          }
+          EOF
+
+          # 11. activity_main.xml
+          cat << 'EOF' > app/src/main/res/layout/activity_main.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:orientation="vertical"
+              android:padding="24dp"
+              android:gravity="center_horizontal"
+              android:background="#F4F6F9">
+
+              <TextView
+                  android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:text="O‘zbekcha Caller ID"
+                  android:textSize="24sp"
+                  android:textStyle="bold"
+                  android:textColor="#1A1A1A"
+                  android:layout_marginTop="30dp" />
+
+              <TextView
+                  android:id="@+id/tvStatus"
+                  android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:text="Holat: Ovozli e’lon FAOL"
+                  android:textSize="17sp"
+                  android:layout_marginTop="15dp"
+                  android:textColor="#2E7D32" />
+
+              <Button
+                  android:id="@+id/btnToggle"
+                  android:layout_width="match_parent"
+                  android:layout_height="70dp"
+                  android:text="XIZMATNI O‘CHIRISH"
+                  android:textSize="18sp"
+                  android:textStyle="bold"
+                  android:textColor="#FFFFFF"
+                  android:layout_marginTop="40dp" />
+
+              <Button
+                  android:id="@+id/btnTestVoice"
+                  android:layout_width="match_parent"
+                  android:layout_height="55dp"
+                  android:text="🔊 Ovozni sinab ko‘rish"
+                  android:textSize="16sp"
+                  android:layout_marginTop="30dp" />
+          </LinearLayout>
+          EOF
+
+          # 12. MainActivity.kt
+          cat << 'EOF' > app/src/main/java/uz/callerid/uzbek/MainActivity.kt
+          package uz.callerid.uzbek
+
+          import android.Manifest
+          import android.content.Context
+          import android.content.pm.PackageManager
+          import android.os.Build
+          import android.os.Bundle
+          import android.speech.tts.TextToSpeech
+          import android.widget.Button
+          import android.widget.TextView
+          import androidx.appcompat.app.AppCompatActivity
+          import androidx.core.app.ActivityCompat
+          import androidx.core.content.ContextCompat
+          import java.util.Locale
+
+          class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
+
+              private lateinit var btnToggle: Button
+              private lateinit var tvStatus: TextView
+              private lateinit var btnTestVoice: Button
+              private var tts: TextToSpeech? = null
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContentView(R.layout.activity_main)
+
+                  checkPermissions()
+                  val prefs = getSharedPreferences("settings", Context.MODE_PRIVATE)
+                  tts = TextToSpeech(this, this)
+
+                  btnToggle = findViewById(R.id.btnToggle)
+                  tvStatus = findViewById(R.id.tvStatus)
+                  btnTestVoice = findViewById(R.id.btnTestVoice)
+
+                  var isEnabled = prefs.getBoolean("enabled", true)
+                  updateUI(isEnabled)
+
+                  btnToggle.setOnClickListener {
+                      isEnabled = !isEnabled
+                      prefs.edit().putBoolean("enabled", isEnabled).apply()
+                      updateUI(isEnabled)
+                  }
+
+                  btnTestVoice.setOnClickListener {
+                      tts?.speak("Assalomu alaykum! Akmal sizga telefon qilyapti.", TextToSpeech.QUEUE_FLUSH, null, "TEST")
+                  }
+              }
+
+              private fun updateUI(enabled: Boolean) {
+                  if (enabled) {
+                      btnToggle.text = "XIZMATNI O‘CHIRISH"
+                      btnToggle.setBackgroundColor(resources.getColor(android.R
