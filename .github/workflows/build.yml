@@ -26,7 +26,6 @@ jobs:
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/java/uz/callerid/uzbek
 
-          # 1. settings.gradle
           cat << 'EOF' > settings.gradle
           pluginManagement {
               repositories {
@@ -46,7 +45,6 @@ jobs:
           include ':app'
           EOF
 
-          # 2. build.gradle (root)
           cat << 'EOF' > build.gradle
           plugins {
               id 'com.android.application' version '8.2.2' apply false
@@ -54,14 +52,12 @@ jobs:
           }
           EOF
 
-          # 3. gradle.properties
           cat << 'EOF' > gradle.properties
           android.useAndroidX=true
           android.nonTransitiveRClass=true
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
           EOF
 
-          # 4. app/build.gradle
           cat << 'EOF' > app/build.gradle
           plugins {
               id 'com.android.application'
@@ -101,7 +97,6 @@ jobs:
           }
           EOF
 
-          # 5. Strings and Themes
           cat << 'EOF' > app/src/main/res/values/strings.xml
           <resources>
               <string name="app_name">O‘zbekcha Caller ID</string>
@@ -114,7 +109,6 @@ jobs:
           </resources>
           EOF
 
-          # 6. AndroidManifest.xml
           cat << 'EOF' > app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -158,7 +152,6 @@ jobs:
           </manifest>
           EOF
 
-          # 7. UzbekNumberConverter.kt
           cat << 'EOF' > app/src/main/java/uz/callerid/uzbek/UzbekNumberConverter.kt
           package uz.callerid.uzbek
 
@@ -202,7 +195,6 @@ jobs:
           }
           EOF
 
-          # 8. ContactHelper.kt
           cat << 'EOF' > app/src/main/java/uz/callerid/uzbek/ContactHelper.kt
           package uz.callerid.uzbek
 
@@ -232,7 +224,6 @@ jobs:
           }
           EOF
 
-          # 9. CallAnnouncerService.kt
           cat << 'EOF' > app/src/main/java/uz/callerid/uzbek/CallAnnouncerService.kt
           package uz.callerid.uzbek
 
@@ -364,7 +355,6 @@ jobs:
           }
           EOF
 
-          # 10. CallReceiver.kt
           cat << 'EOF' > app/src/main/java/uz/callerid/uzbek/CallReceiver.kt
           package uz.callerid.uzbek
 
@@ -398,7 +388,6 @@ jobs:
           }
           EOF
 
-          # 11. activity_main.xml
           cat << 'EOF' > app/src/main/res/layout/activity_main.xml
           <?xml version="1.0" encoding="utf-8"?>
           <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -447,7 +436,6 @@ jobs:
           </LinearLayout>
           EOF
 
-          # 12. MainActivity.kt
           cat << 'EOF' > app/src/main/java/uz/callerid/uzbek/MainActivity.kt
           package uz.callerid.uzbek
 
@@ -501,4 +489,10 @@ jobs:
                   if (enabled) {
                       btnToggle.text = "XIZMATNI O‘CHIRISH"
                       btnToggle.setBackgroundColor(resources.getColor(android.R.color.holo_red_dark))
-                      tvStatus.text = "Holat: Ovozli e’lo
+                      tvStatus.text = "Holat: Ovozli e’lon FAOL"
+                      tvStatus.setTextColor(resources.getColor(android.R.color.holo_green_dark))
+                  } else {
+                      btnToggle.text = "XIZMATNI YOQISH"
+                      btnToggle.setBackgroundColor(resources.getColor(android.R.color.holo_green_dark))
+                      tvStatus.text = "Holat: Ovozli e’lon TO‘XTATILGAN"
+                      tvStatus.setTextColo
