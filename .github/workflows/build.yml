@@ -19,9 +19,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Generate Project Code
         run: |
           mkdir -p gradle/wrapper
@@ -503,4 +500,5 @@ jobs:
               private fun updateUI(enabled: Boolean) {
                   if (enabled) {
                       btnToggle.text = "XIZMATNI O‘CHIRISH"
-                      btnToggle.setBackgroundColor(resources.getColor(android.R
+                      btnToggle.setBackgroundColor(resources.getColor(android.R.color.holo_red_dark))
+                      tvStatus.text = "Holat: Ovozli e’lo
